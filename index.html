@@ -934,18 +934,41 @@
       `  • ${i.name} x${i.quantity || 1}${i.price ? ' — ' + formatPrice(i) : ''}`
     ).join('\n');
     const code = data.orderCode || '';
+    const codeAttr = String(code).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     return `
       <div class="order-card">
         <div class="order-title">${data.title || 'Đơn hàng đã tạo'} — ${code}</div>
         <pre>${items}</pre>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-          <a class="order-link" href="${data.order_url || '#'}" target="_blank">Xem đơn hàng &rarr;</a>
-          <button class="order-link" style="border:none;cursor:pointer" onclick="enterEditOrder('${code}')">Chỉnh sửa đơn</button>
-          <button class="order-link" style="border:none;cursor:pointer;background:#e55" onclick="cancelOrder('${code}')">Hủy đơn hàng</button>
+          <button class="order-link" style="border:none;cursor:pointer" onclick="openBassoOrder('${codeAttr}')">Xem đơn hàng &rarr;</button>
+          <button class="order-link" style="border:none;cursor:pointer" onclick="enterEditOrder('${codeAttr}')">Chỉnh sửa đơn</button>
+          <button class="order-link" style="border:none;cursor:pointer;background:#e55" onclick="cancelOrder('${codeAttr}')">Hủy đơn hàng</button>
           <button class="order-link" style="border:none;cursor:pointer;background:#28a745" onclick="startNewOrder()">Tạo đơn mới</button>
         </div>
       </div>
     `;
+  }
+
+  /** Tra id nội bộ theo mã đơn rồi mở trang hethong (tránh URL cũ / id sai trong tin nhắn đã lưu). */
+  async function openBassoOrder(orderCode) {
+    const code = String(orderCode || '').trim();
+    if (!code) {
+      addMessage('ai', 'Không mở được đơn: thiếu mã đơn.');
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/api/get-order?order_code=${encodeURIComponent(code)}`, {
+        headers: getAuthHeaders(),
+      });
+      const data = await res.json();
+      const id = data?.data?.order?.id;
+      if (!data.success || !id) {
+        throw new Error(data.message || 'Không tìm thấy id đơn trên Basso');
+      }
+      window.open(`https://basso.vn/hethong/basso/customer_order/detail/${id}`, '_blank', 'noopener');
+    } catch (e) {
+      addMessage('ai', `Không mở được đơn ${code}: ${translateError(e.message || e)}`);
+    }
   }
 
   // ===== EDIT ORDER MODE =====
@@ -1760,11 +1783,18 @@
       session.items = [];
       session.salePct = 0;
       updateHint();
+      const createdId =
+        orderData.data.orderId ||
+        orderData.data.order_id ||
+        orderData.data.order?.id ||
+        '';
       addMessage('ai', 'Đã tạo đơn hàng thành công!\n\nBấm "Tạo đơn mới" để tiếp tục.', {
         orderData: {
-          orderCode: orderData.data.orderCode,
+          orderCode: orderData.data.orderCode || orderData.data.order_code || orderData.data.order?.code,
           items: completedItems,
-          order_url: `https://basso.vn/hethong/basso/customer_order/detail/${orderData.data.orderId}`,
+          order_url: createdId
+            ? `https://basso.vn/hethong/basso/customer_order/detail/${createdId}`
+            : '',
         }
       });
     } else {
