@@ -745,9 +745,10 @@
     document.querySelector('.sidebar-welcome').textContent = 'Welcome, ' + sessionUser.name;
   }
 
+  // Local → localhost. Còn lại dùng same-origin (ai.basso.vn bot hoặc Render) để luôn trúng bản đã deploy.
   const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://localhost:3000'
-    : 'https://ai-tao-don-hang.onrender.com';
+    : '';
 
   // Nếu session thiếu roles, fetch từ server (fallback cho session cũ)
   if (sessionUser && !sessionUser.roles) {
@@ -929,18 +930,30 @@
     }
   }
 
+  /** Luôn mở qua /hethong/... — URL cũ /basso/customer_order/detail/{id} đang trả 404. */
+  function toHethongOrderUrl(idOrUrl) {
+    const s = String(idOrUrl || '').trim();
+    if (!s) return '';
+    const m = s.match(/\/detail\/(\d+)/) || s.match(/^(\d+)$/);
+    return m ? `https://basso.vn/hethong/basso/customer_order/detail/${m[1]}` : '';
+  }
+
   function renderOrderCard(data) {
     const items = (data.items || []).map(i =>
       `  • ${i.name} x${i.quantity || 1}${i.price ? ' — ' + formatPrice(i) : ''}`
     ).join('\n');
     const code = data.orderCode || '';
     const codeAttr = String(code).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    // Rewrite URL cũ (thiếu /hethong) ngay trên thẻ đã lưu trong chat
+    const href = toHethongOrderUrl(data.order_url) || toHethongOrderUrl(data.orderId) || '#';
+    const hrefAttr = href.replace(/'/g, "\\'");
     return `
       <div class="order-card">
         <div class="order-title">${data.title || 'Đơn hàng đã tạo'} — ${code}</div>
         <pre>${items}</pre>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-          <button class="order-link" style="border:none;cursor:pointer" onclick="openBassoOrder('${codeAttr}')">Xem đơn hàng &rarr;</button>
+          <a class="order-link" href="${href}" target="_blank" rel="noopener"
+             onclick="openBassoOrder('${codeAttr}', '${hrefAttr}'); return false;">Xem đơn hàng &rarr;</a>
           <button class="order-link" style="border:none;cursor:pointer" onclick="enterEditOrder('${codeAttr}')">Chỉnh sửa đơn</button>
           <button class="order-link" style="border:none;cursor:pointer;background:#e55" onclick="cancelOrder('${codeAttr}')">Hủy đơn hàng</button>
           <button class="order-link" style="border:none;cursor:pointer;background:#28a745" onclick="startNewOrder()">Tạo đơn mới</button>
@@ -949,26 +962,26 @@
     `;
   }
 
-  /** Tra id nội bộ theo mã đơn rồi mở trang hethong (tránh URL cũ / id sai trong tin nhắn đã lưu). */
-  async function openBassoOrder(orderCode) {
+  /** Ưu tiên tra id theo mã đơn; fallback rewrite URL đã lưu sang /hethong/. */
+  async function openBassoOrder(orderCode, savedUrl) {
     const code = String(orderCode || '').trim();
-    if (!code) {
-      addMessage('ai', 'Không mở được đơn: thiếu mã đơn.');
+    let id = '';
+    try {
+      if (code) {
+        const res = await fetch(`${API_BASE}/api/get-order?order_code=${encodeURIComponent(code)}`, {
+          headers: getAuthHeaders(),
+        });
+        const data = await res.json();
+        id = data?.data?.order?.id || data?.data?.orderId || data?.data?.id || '';
+      }
+    } catch (_) { /* fallback below */ }
+
+    const url = toHethongOrderUrl(id) || toHethongOrderUrl(savedUrl);
+    if (!url) {
+      addMessage('ai', `Không mở được đơn ${code || ''}: thiếu id nội bộ. Thử F5 hoặc mở lại đơn trên Basso.`);
       return;
     }
-    try {
-      const res = await fetch(`${API_BASE}/api/get-order?order_code=${encodeURIComponent(code)}`, {
-        headers: getAuthHeaders(),
-      });
-      const data = await res.json();
-      const id = data?.data?.order?.id;
-      if (!data.success || !id) {
-        throw new Error(data.message || 'Không tìm thấy id đơn trên Basso');
-      }
-      window.open(`https://basso.vn/hethong/basso/customer_order/detail/${id}`, '_blank', 'noopener');
-    } catch (e) {
-      addMessage('ai', `Không mở được đơn ${code}: ${translateError(e.message || e)}`);
-    }
+    window.open(url, '_blank', 'noopener');
   }
 
   // ===== EDIT ORDER MODE =====
