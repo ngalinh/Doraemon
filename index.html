@@ -745,10 +745,10 @@
     document.querySelector('.sidebar-welcome').textContent = 'Welcome, ' + sessionUser.name;
   }
 
-  // Local → localhost. Còn lại dùng same-origin (ai.basso.vn bot hoặc Render) để luôn trúng bản đã deploy.
+  // Local → localhost. Production: relative '.' để đúng cả Render lẫn ai.basso.vn/b/{id}/.
   const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
     ? 'http://localhost:3000'
-    : '';
+    : '.';
 
   // Nếu session thiếu roles, fetch từ server (fallback cho session cũ)
   if (sessionUser && !sessionUser.roles) {
