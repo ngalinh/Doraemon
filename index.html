@@ -2699,12 +2699,6 @@
       const status = item._status || 'unchanged';
       const opacity = status === 'deleted' ? 'opacity:0.4;' : '';
       const badge = status === 'deleted' ? ' ❌' : status === 'modified' ? ' ✏️' : status === 'new' ? ' 🆕' : '';
-      const vars = (item.variations || []).map((v, vi) =>
-        `<span class="cart-field" ${isOrig && status !== 'deleted' ? `onclick="editOrderItemField(${i},'var',${vi})"` : ''}>
-          <span class="cart-field-label">${escapeHtml(v.name)}</span>
-          <span class="cart-field-value">${escapeHtml(v.value)}</span>
-        </span>`
-      ).join('');
       const pct = getItemSalePct(item, salePct);
       const ep = effectivePrice(item, salePct);
       const priceShow = item.price
@@ -2713,6 +2707,13 @@
       const linkShow = item.link ? item.link.substring(0, 35) + '...' : '⚠️ chưa có link';
       const thumbSrc = item.thumb || (item.image_path ? (item.image_path.startsWith('http') ? item.image_path : 'https://basso.vn' + item.image_path) : '');
       const canEdit = status !== 'deleted';
+      // Variants phải dùng canEdit giống Link/Qty — trước đây chỉ isOrig nên món copy (addItems) không bấm được.
+      const vars = (item.variations || []).map((v, vi) =>
+        `<span class="cart-field" ${canEdit ? `onclick="editOrderItemField(${i},'var',${vi})"` : ''}>
+          <span class="cart-field-label">${escapeHtml(v.name)}</span>
+          <span class="cart-field-value">${escapeHtml(v.value)}</span>
+        </span>`
+      ).join('');
       const thumbClick = canEdit ? `onclick="event.stopPropagation();openImageUploader('editOrder',${i})"` : '';
       const thumbHtml = thumbSrc
         ? `<img class="cart-card-thumb" src="${thumbSrc}" ${thumbClick} style="cursor:${canEdit ? 'pointer' : 'default'}" title="${canEdit ? 'Bấm để đổi ảnh' : ''}" />`
@@ -4839,7 +4840,10 @@
     const clone = JSON.parse(JSON.stringify(src));
     delete clone.id;
     delete clone._original;
-    delete clone._status;
+    clone._status = 'new';
+    clone.variations = Array.isArray(clone.variations)
+      ? clone.variations.map((v) => ({ name: v.name || '', value: v.value || '' }))
+      : [];
     editing.addItems.push(clone);
     saveSessions();
     renderEditOrder();
